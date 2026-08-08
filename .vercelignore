@@ -1,0 +1,12 @@
+# Ignore training scripts, datasets, and local saved model weights from Vercel deployment
+dataset/
+models/
+saved_models/
+train.py
+evaluate.py
+generate_dataset.py
+test_api.py
+.git/
+__pycache__/
+*.csv
+*.md

@@ -231,4 +231,4 @@ def build_dataset(samples_per_class=200):
 
 if __name__ == "__main__":
     random.seed(42)
-    build_dataset(samples_per_class=150) # Total 900 samples (630 train, 135 val, 135 test)
+    build_dataset(samples_per_class=1000)  # Total 6000 samples (4200 train, 900 val, 900 test)

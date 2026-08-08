@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import random
 import torch
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
@@ -8,6 +9,7 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification, get_
 
 SAVED_MODELS_DIR = "saved_models"
 os.makedirs(SAVED_MODELS_DIR, exist_ok=True)
+SEED = 42
 
 MODEL_CONFIGS = [
     {
@@ -15,7 +17,7 @@ MODEL_CONFIGS = [
         "path": "models/distilbert_base_uncased",
         "output_dir": os.path.join(SAVED_MODELS_DIR, "distilbert_doc_classifier"),
         "lr": 3e-5,
-        "epochs": 3,
+        "epochs": 4,
         "batch_size": 32,
     },
     {
@@ -23,13 +25,13 @@ MODEL_CONFIGS = [
         "path": "models/tinybert_general_4l_312d",
         "output_dir": os.path.join(SAVED_MODELS_DIR, "tinybert_doc_classifier"),
         "lr": 5e-5,
-        "epochs": 3,
+        "epochs": 4,
         "batch_size": 32,
     }
 ]
 
 class OCRDataset(Dataset):
-    def __init__(self, texts, labels, tokenizer, max_length=96):
+    def __init__(self, texts, labels, tokenizer, max_length=128):
         self.texts = texts
         self.labels = labels
         self.tokenizer = tokenizer
@@ -39,7 +41,7 @@ class OCRDataset(Dataset):
         return len(self.texts)
 
     def __getitem__(self, idx):
-        text = str(self.texts[idx])
+        text = "" if pd.isna(self.texts[idx]) else str(self.texts[idx])
         encoding = self.tokenizer(
             text,
             truncation=True,
@@ -82,6 +84,9 @@ def train_model(config, train_df, val_df, label2id, id2label):
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=int(total_steps * 0.1), num_training_steps=total_steps)
 
     start_time = time.time()
+    best_val_acc = float("-inf")
+    best_epoch = 0
+    os.makedirs(config["output_dir"], exist_ok=True)
 
     for epoch in range(1, config["epochs"] + 1):
         model.train()
@@ -89,11 +94,8 @@ def train_model(config, train_df, val_df, label2id, id2label):
         
         for batch_idx, batch in enumerate(train_loader, 1):
             optimizer.zero_grad()
-            input_ids = batch["input_ids"].to(device)
-            attention_mask = batch["attention_mask"].to(device)
-            labels = batch["labels"].to(device)
-
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+            batch = {key: value.to(device) for key, value in batch.items()}
+            outputs = model(**batch)
             loss = outputs.loss
             loss.backward()
 
@@ -115,11 +117,9 @@ def train_model(config, train_df, val_df, label2id, id2label):
 
         with torch.no_grad():
             for batch in val_loader:
-                input_ids = batch["input_ids"].to(device)
-                attention_mask = batch["attention_mask"].to(device)
-                labels = batch["labels"].to(device)
-
-                outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+                batch = {key: value.to(device) for key, value in batch.items()}
+                labels = batch["labels"]
+                outputs = model(**batch)
                 total_val_loss += outputs.loss.item()
 
                 preds = torch.argmax(outputs.logits, dim=1)
@@ -131,13 +131,16 @@ def train_model(config, train_df, val_df, label2id, id2label):
 
         print(f"--> [{config['name']}] Epoch {epoch}/{config['epochs']} Complete | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | Val Acc: {val_acc:.4f}", flush=True)
 
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            best_epoch = epoch
+            model.save_pretrained(config["output_dir"])
+            tokenizer.save_pretrained(config["output_dir"])
+            print(f"  Saved new best checkpoint (epoch {epoch}).", flush=True)
+
     training_time = time.time() - start_time
     print(f"Training for {config['name']} completed in {training_time:.2f} seconds.", flush=True)
 
-    os.makedirs(config["output_dir"], exist_ok=True)
-    model.save_pretrained(config["output_dir"])
-    tokenizer.save_pretrained(config["output_dir"])
-    
     meta_info = {
         "model_name": config["name"],
         "base_model_path": config["path"],
@@ -145,7 +148,8 @@ def train_model(config, train_df, val_df, label2id, id2label):
         "batch_size": config["batch_size"],
         "lr": config["lr"],
         "training_time_seconds": round(training_time, 2),
-        "final_val_acc": round(val_acc, 4)
+        "best_epoch": best_epoch,
+        "best_val_acc": round(best_val_acc, 4)
     }
     with open(os.path.join(config["output_dir"], "training_meta.json"), "w") as f:
         json.dump(meta_info, f, indent=2)
@@ -153,6 +157,11 @@ def train_model(config, train_df, val_df, label2id, id2label):
     print(f"Successfully saved {config['name']} to: {config['output_dir']}", flush=True)
 
 def main():
+    random.seed(SEED)
+    torch.manual_seed(SEED)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(SEED)
+
     with open("dataset/label_map.json", "r") as f:
         label_map = json.load(f)
     label2id = label_map["label2id"]
@@ -163,6 +172,17 @@ def main():
 
     train_df = pd.read_csv("dataset/train.csv")
     val_df = pd.read_csv("dataset/val.csv")
+
+    required_columns = {"text", "label"}
+    for name, dataframe in (("train", train_df), ("validation", val_df)):
+        missing_columns = required_columns - set(dataframe.columns)
+        if missing_columns:
+            raise ValueError(f"{name}.csv is missing columns: {sorted(missing_columns)}")
+        if dataframe.empty:
+            raise ValueError(f"{name}.csv must contain at least one example.")
+        unknown_labels = set(dataframe["label"]) - set(label2id)
+        if unknown_labels:
+            raise ValueError(f"{name}.csv has labels absent from label_map.json: {sorted(unknown_labels)}")
 
     for config in MODEL_CONFIGS:
         train_model(config, train_df, val_df, label2id, id2label)

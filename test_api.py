@@ -1,13 +1,13 @@
 import sys
 from fastapi.testclient import TestClient
-from api import app
+from api import app as api_app
 
 def run_tests():
     print("==================================================")
     print("       RUNNING FASTAPI ENDPOINT UNIT TESTS")
     print("==================================================")
 
-    with TestClient(app) as client:
+    with TestClient(api_app) as client:
         # Test 1: Dashboard HTML Endpoint
         print("\n[Test 1] GET / (Dashboard UI)")
         res = client.get("/")

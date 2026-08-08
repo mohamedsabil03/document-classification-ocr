@@ -3,113 +3,91 @@ import json
 import time
 from typing import Optional
 from contextlib import asynccontextmanager
-import torch
-import numpy as np
-from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import JSONResponse, HTMLResponse
-from pydantic import BaseModel, Field
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+# Try importing torch & transformers (Local execution)
+# Fallback to httpx Hugging Face Inference API (Vercel Serverless execution)
+try:
+    import torch
+    import numpy as np
+    from transformers import AutoTokenizer, AutoModelForSequenceClassification
+    USE_LOCAL_TORCH = True
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+except ImportError:
+    USE_LOCAL_TORCH = False
+    import httpx
+    device = "cpu (remote HF API)"
 
-# ============================================================
-# HUGGING FACE MODEL REPOSITORIES
-# ============================================================
-
-MODEL_REPOS = {
-    "distilbert": "Sabil333/distilbert_doc_classifier",
-    "tinybert": "Sabil333/tinybert_doc_classifier"
-}
-
-# Model Registry
-LOADED_MODELS = {}
-
-# Default model
-active_model_key = "distilbert"
-
-# Global label maps
-label2id = {}
-id2label = {}
-
-# Device
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def load_all_models():
     global active_model_key, label2id, id2label
 
-    print("Initializing models from Hugging Face...")
+    print(f"Initializing models (Local Torch: {USE_LOCAL_TORCH})...")
 
-    for model_key, repo_id in MODEL_REPOS.items():
+    if USE_LOCAL_TORCH:
+        for model_key, repo_id in MODEL_REPOS.items():
+            try:
+                print(f"Loading {model_key} locally from Hugging Face: {repo_id}")
+                tokenizer = AutoTokenizer.from_pretrained(repo_id)
+                model = AutoModelForSequenceClassification.from_pretrained(repo_id).to(device)
+                model.eval()
 
-        try:
-            print(f"Loading {model_key} from Hugging Face: {repo_id}")
+                model_id2label = {int(k): v for k, v in model.config.id2label.items()}
+                model_label2id = {v: k for k, v in model_id2label.items()}
 
-            tokenizer = AutoTokenizer.from_pretrained(repo_id)
+                LOADED_MODELS[model_key] = {
+                    "name": "DistilBERT" if model_key == "distilbert" else "TinyBERT",
+                    "repo": repo_id,
+                    "tokenizer": tokenizer,
+                    "model": model,
+                    "id2label": model_id2label,
+                    "label2id": model_label2id,
+                    "params": "66.9M" if model_key == "distilbert" else "14.3M",
+                    "size": "256 MB" if model_key == "distilbert" else "55 MB",
+                    "avg_latency": "~65 ms" if model_key == "distilbert" else "~15 ms"
+                }
+                print(f"Successfully loaded {model_key} locally")
+            except Exception as e:
+                print(f"ERROR loading {model_key}: {str(e)}")
+    else:
+        import httpx
+        for model_key, repo_id in MODEL_REPOS.items():
+            try:
+                print(f"Registering {model_key} via Hugging Face Serverless API: {repo_id}")
+                model_id2label = {
+                    0: "invoice",
+                    1: "receipt",
+                    2: "resume",
+                    3: "letter",
+                    4: "scientific_report",
+                    5: "legal_contract"
+                }
+                try:
+                    resp = httpx.get(f"https://huggingface.co/{repo_id}/raw/main/config.json", timeout=5.0)
+                    if resp.status_code == 200:
+                        cfg = resp.json()
+                        if "id2label" in cfg:
+                            model_id2label = {int(k): v for k, v in cfg["id2label"].items()}
+                except Exception:
+                    pass
 
-            model = AutoModelForSequenceClassification.from_pretrained(
-                repo_id
-            )
+                model_label2id = {v: k for k, v in model_id2label.items()}
 
-            model = model.to(device)
-            model.eval()
+                LOADED_MODELS[model_key] = {
+                    "name": "DistilBERT" if model_key == "distilbert" else "TinyBERT",
+                    "repo": repo_id,
+                    "id2label": model_id2label,
+                    "label2id": model_label2id,
+                    "params": "66.9M" if model_key == "distilbert" else "14.3M",
+                    "size": "256 MB" if model_key == "distilbert" else "55 MB",
+                    "avg_latency": "~65 ms" if model_key == "distilbert" else "~15 ms"
+                }
+                print(f"Successfully registered {model_key} for HF API inference")
+            except Exception as e:
+                print(f"ERROR registering {model_key}: {str(e)}")
 
-            # Get labels directly from the model configuration
-            model_id2label = model.config.id2label
-
-            # Convert keys to integers
-            model_id2label = {
-                int(k): v for k, v in model_id2label.items()
-            }
-
-            model_label2id = {
-                v: k for k, v in model_id2label.items()
-            }
-
-            LOADED_MODELS[model_key] = {
-                "name": (
-                    "DistilBERT"
-                    if model_key == "distilbert"
-                    else "TinyBERT"
-                ),
-                "repo": repo_id,
-                "tokenizer": tokenizer,
-                "model": model,
-                "id2label": model_id2label,
-                "label2id": model_label2id,
-
-                # Your benchmark information
-                "params": (
-                    "66.9M"
-                    if model_key == "distilbert"
-                    else "14.3M"
-                ),
-
-                "size": (
-                    "256 MB"
-                    if model_key == "distilbert"
-                    else "55 MB"
-                ),
-
-                "avg_latency": (
-                    "~65 ms"
-                    if model_key == "distilbert"
-                    else "~15 ms"
-                )
-            }
-
-            print(f"Successfully loaded {model_key}")
-
-        except Exception as e:
-            print(f"ERROR loading {model_key}: {str(e)}")
-
-
-    # Make sure at least one model loaded
     if not LOADED_MODELS:
-        raise RuntimeError(
-            "Could not load any models from Hugging Face."
-        )
+        raise RuntimeError("Could not load or register any models.")
 
-
-    # Default model
     if "distilbert" in LOADED_MODELS:
         active_model_key = "distilbert"
     elif "tinybert" in LOADED_MODELS:
@@ -118,18 +96,9 @@ def load_all_models():
     id2label = LOADED_MODELS[active_model_key]["id2label"]
     label2id = LOADED_MODELS[active_model_key]["label2id"]
 
-    print(
-        "API initialization complete."
-    )
-
-    print(
-        f"Active default model: "
-        f"{LOADED_MODELS[active_model_key]['name']}"
-    )
-
-    print(
-        f"Loaded models: {list(LOADED_MODELS.keys())}"
-    )
+    print("API initialization complete.")
+    print(f"Active default model: {LOADED_MODELS[active_model_key]['name']}")
+    print(f"Loaded models: {list(LOADED_MODELS.keys())}")
 
 
 @asynccontextmanager
@@ -775,32 +744,71 @@ def predict_document_type(payload: DocumentRequest):
             )
 
     model_entry = LOADED_MODELS[selected_key]
-    model_obj = model_entry["model"]
-    tokenizer_obj = model_entry["tokenizer"]
     disp_name = model_entry["name"]
     model_id2label = model_entry.get("id2label", id2label)
 
     try:
         start_t = time.time()
         
-        inputs = tokenizer_obj(
-            raw_text,
-            truncation=True,
-            max_length=128,
-            padding="max_length",
-            return_tensors="pt"
-        ).to(device)
+        if USE_LOCAL_TORCH:
+            model_obj = model_entry["model"]
+            tokenizer_obj = model_entry["tokenizer"]
+            inputs = tokenizer_obj(
+                raw_text,
+                truncation=True,
+                max_length=128,
+                padding="max_length",
+                return_tensors="pt"
+            ).to(device)
 
-        with torch.no_grad():
-            outputs = model_obj(**inputs)
-            probs = torch.softmax(outputs.logits, dim=-1).cpu().numpy()[0]
+            with torch.no_grad():
+                outputs = model_obj(**inputs)
+                probs = torch.softmax(outputs.logits, dim=-1).cpu().numpy()[0]
 
-        pred_id = int(np.argmax(probs))
-        predicted_class = model_id2label.get(pred_id, "unknown")
-        confidence = float(probs[pred_id])
+            pred_id = int(np.argmax(probs))
+            predicted_class = model_id2label.get(pred_id, "unknown")
+            confidence = float(probs[pred_id])
+            class_probs = {model_id2label[i]: float(round(probs[i], 4)) for i in range(len(model_id2label))}
+        else:
+            import httpx
+            headers = {}
+            hf_token = os.environ.get("HF_TOKEN")
+            if hf_token:
+                headers["Authorization"] = f"Bearer {hf_token}"
+            
+            hf_url = f"https://api-inference.huggingface.co/models/{model_entry['repo']}"
+            resp = httpx.post(hf_url, json={"inputs": raw_text}, headers=headers, timeout=20.0)
+            
+            if resp.status_code != 200:
+                raise RuntimeError(f"Hugging Face API returned status {resp.status_code}: {resp.text}")
+
+            result = resp.json()
+            if isinstance(result, list) and len(result) > 0:
+                candidates = result[0] if isinstance(result[0], list) else result
+                top_candidate = candidates[0]
+                
+                raw_lbl = top_candidate.get("label", "")
+                if raw_lbl.startswith("LABEL_"):
+                    lbl_id = int(raw_lbl.replace("LABEL_", ""))
+                    predicted_class = model_id2label.get(lbl_id, raw_lbl)
+                else:
+                    predicted_class = raw_lbl
+
+                confidence = float(top_candidate.get("score", 0.0))
+
+                class_probs = {}
+                for item in candidates:
+                    lbl = item.get("label", "")
+                    if lbl.startswith("LABEL_"):
+                        l_id = int(lbl.replace("LABEL_", ""))
+                        c_name = model_id2label.get(l_id, lbl)
+                    else:
+                        c_name = lbl
+                    class_probs[c_name] = float(round(item.get("score", 0.0), 4))
+            else:
+                raise RuntimeError("Unexpected response structure from Hugging Face API.")
+
         latency_ms = round((time.time() - start_t) * 1000.0, 2)
-
-        class_probs = {model_id2label[i]: float(round(probs[i], 4)) for i in range(len(model_id2label))}
 
         return PredictionResponse(
             predicted_document_type=predicted_class,

@@ -10,78 +10,127 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel, Field
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-SAVED_MODELS_DIR = "saved_models"
-BEST_MODEL_INFO = os.path.join(SAVED_MODELS_DIR, "best_model_info.json")
-LABEL_MAP_PATH = os.path.join(SAVED_MODELS_DIR, "label_map.json")
+# ============================================================
+# HUGGING FACE MODEL REPOSITORIES
+# ============================================================
 
-# Model Registry Dictionary
+MODEL_REPOS = {
+    "distilbert": "Sabil333/distilbert_doc_classifier",
+    "tinybert": "Sabil333/tinybert_doc_classifier"
+}
+
+# Model Registry
 LOADED_MODELS = {}
+
+# Default model
 active_model_key = "distilbert"
+
+# Global label maps
 label2id = {}
 id2label = {}
+
+# Device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+
 def load_all_models():
-    global label2id, id2label, active_model_key
-    
-    print("Initializing models and tokenizers for API service...")
-    
-    if not os.path.exists(LABEL_MAP_PATH):
-        raise RuntimeError(f"Label map file not found at {LABEL_MAP_PATH}. Ensure models are trained first.")
-    
-    with open(LABEL_MAP_PATH, "r") as f:
-        label_map = json.load(f)
-    label2id = label_map["label2id"]
-    id2label = {int(k): v for k, v in label_map["id2label"].items()}
+    global active_model_key, label2id, id2label
 
-    # Load DistilBERT if available
-    distil_dir = os.path.join(SAVED_MODELS_DIR, "distilbert_doc_classifier")
-    if os.path.exists(distil_dir):
-        print(f"Loading DistilBERT from: {distil_dir}")
-        tok = AutoTokenizer.from_pretrained(distil_dir)
-        mod = AutoModelForSequenceClassification.from_pretrained(distil_dir).to(device)
-        mod.eval()
-        LOADED_MODELS["distilbert"] = {
-            "name": "DistilBERT",
-            "dir": distil_dir,
-            "tokenizer": tok,
-            "model": mod,
-            "params": "66.9M",
-            "size": "256 MB",
-            "avg_latency": "~65 ms"
-        }
+    print("Initializing models from Hugging Face...")
 
-    # Load TinyBERT if available
-    tiny_dir = os.path.join(SAVED_MODELS_DIR, "tinybert_doc_classifier")
-    if os.path.exists(tiny_dir):
-        print(f"Loading TinyBERT from: {tiny_dir}")
-        tok = AutoTokenizer.from_pretrained(tiny_dir)
-        mod = AutoModelForSequenceClassification.from_pretrained(tiny_dir).to(device)
-        mod.eval()
-        LOADED_MODELS["tinybert"] = {
-            "name": "TinyBERT",
-            "dir": tiny_dir,
-            "tokenizer": tok,
-            "model": mod,
-            "params": "14.3M",
-            "size": "55 MB",
-            "avg_latency": "~15 ms"
-        }
+    for model_key, repo_id in MODEL_REPOS.items():
 
+        try:
+            print(f"Loading {model_key} from Hugging Face: {repo_id}")
+
+            tokenizer = AutoTokenizer.from_pretrained(repo_id)
+
+            model = AutoModelForSequenceClassification.from_pretrained(
+                repo_id
+            )
+
+            model = model.to(device)
+            model.eval()
+
+            # Get labels directly from the model configuration
+            model_id2label = model.config.id2label
+
+            # Convert keys to integers
+            model_id2label = {
+                int(k): v for k, v in model_id2label.items()
+            }
+
+            model_label2id = {
+                v: k for k, v in model_id2label.items()
+            }
+
+            LOADED_MODELS[model_key] = {
+                "name": (
+                    "DistilBERT"
+                    if model_key == "distilbert"
+                    else "TinyBERT"
+                ),
+                "repo": repo_id,
+                "tokenizer": tokenizer,
+                "model": model,
+                "id2label": model_id2label,
+                "label2id": model_label2id,
+
+                # Your benchmark information
+                "params": (
+                    "66.9M"
+                    if model_key == "distilbert"
+                    else "14.3M"
+                ),
+
+                "size": (
+                    "256 MB"
+                    if model_key == "distilbert"
+                    else "55 MB"
+                ),
+
+                "avg_latency": (
+                    "~65 ms"
+                    if model_key == "distilbert"
+                    else "~15 ms"
+                )
+            }
+
+            print(f"Successfully loaded {model_key}")
+
+        except Exception as e:
+            print(f"ERROR loading {model_key}: {str(e)}")
+
+
+    # Make sure at least one model loaded
     if not LOADED_MODELS:
-        raise RuntimeError("No fine-tuned models found in saved_models/")
+        raise RuntimeError(
+            "Could not load any models from Hugging Face."
+        )
 
-    # Determine default active model
-    if os.path.exists(BEST_MODEL_INFO):
-        with open(BEST_MODEL_INFO, "r") as f:
-            info = json.load(f)
-        best_name = info.get("best_model_name", "").lower()
-        if "tiny" in best_name and "tinybert" in LOADED_MODELS:
-            active_model_key = "tinybert"
-        elif "distil" in best_name and "distilbert" in LOADED_MODELS:
-            active_model_key = "distilbert"
 
-    print(f"API initialization complete. Active default model: {LOADED_MODELS[active_model_key]['name']}")
+    # Default model
+    if "distilbert" in LOADED_MODELS:
+        active_model_key = "distilbert"
+    elif "tinybert" in LOADED_MODELS:
+        active_model_key = "tinybert"
+
+    id2label = LOADED_MODELS[active_model_key]["id2label"]
+    label2id = LOADED_MODELS[active_model_key]["label2id"]
+
+    print(
+        "API initialization complete."
+    )
+
+    print(
+        f"Active default model: "
+        f"{LOADED_MODELS[active_model_key]['name']}"
+    )
+
+    print(
+        f"Loaded models: {list(LOADED_MODELS.keys())}"
+    )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -729,6 +778,7 @@ def predict_document_type(payload: DocumentRequest):
     model_obj = model_entry["model"]
     tokenizer_obj = model_entry["tokenizer"]
     disp_name = model_entry["name"]
+    model_id2label = model_entry.get("id2label", id2label)
 
     try:
         start_t = time.time()
@@ -746,11 +796,11 @@ def predict_document_type(payload: DocumentRequest):
             probs = torch.softmax(outputs.logits, dim=-1).cpu().numpy()[0]
 
         pred_id = int(np.argmax(probs))
-        predicted_class = id2label.get(pred_id, "unknown")
+        predicted_class = model_id2label.get(pred_id, "unknown")
         confidence = float(probs[pred_id])
         latency_ms = round((time.time() - start_t) * 1000.0, 2)
 
-        class_probs = {id2label[i]: float(round(probs[i], 4)) for i in range(len(id2label))}
+        class_probs = {model_id2label[i]: float(round(probs[i], 4)) for i in range(len(model_id2label))}
 
         return PredictionResponse(
             predicted_document_type=predicted_class,

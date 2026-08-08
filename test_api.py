@@ -64,18 +64,6 @@ def run_tests():
         print("Prediction Result:", data)
         assert data["model_used"] == "DistilBERT"
 
-        # Test 6: Dynamic Model Switch Endpoint
-        print("\n[Test 6] POST /switch_model (Switch Default Model to TinyBERT)")
-        res = client.post("/switch_model", json={"model_name": "tinybert"})
-        assert res.status_code == 200
-        print("Switch Response:", res.json())
-        
-        # Verify active default is now TinyBERT
-        res_check = client.get("/health")
-        assert res_check.json()["active_default_model"] == "TinyBERT"
-
-        # Switch back to DistilBERT
-        client.post("/switch_model", json={"model_name": "distilbert"})
 
         # Test 7: Error Handling - Empty Text
         print("\n[Test 7] POST /predict (Error Handling - Empty Text)")

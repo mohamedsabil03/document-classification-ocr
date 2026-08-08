@@ -108,13 +108,6 @@ class DocumentRequest(BaseModel):
         json_schema_extra={"example": "distilbert"}
     )
 
-class ModelSwitchRequest(BaseModel):
-    model_name: str = Field(
-        ...,
-        description="Model key to set as active default: 'distilbert' or 'tinybert'",
-        json_schema_extra={"example": "tinybert"}
-    )
-
 # Output schema
 class PredictionResponse(BaseModel):
     predicted_document_type: str
@@ -687,22 +680,6 @@ def health_check():
         "active_default_model": LOADED_MODELS[active_model_key]["name"],
         "loaded_models": list(LOADED_MODELS.keys()),
         "device": str(device)
-    }
-
-@app.post("/switch_model", tags=["Model Management"])
-def switch_active_model(payload: ModelSwitchRequest):
-    global active_model_key
-    target = payload.model_name.lower().strip()
-    if target not in LOADED_MODELS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid model_name '{payload.model_name}'. Choose from: {list(LOADED_MODELS.keys())}"
-        )
-    active_model_key = target
-    return {
-        "status": "success",
-        "message": f"Active default model switched to '{LOADED_MODELS[active_model_key]['name']}'",
-        "active_model": LOADED_MODELS[active_model_key]["name"]
     }
 
 @app.post("/predict", response_model=PredictionResponse, tags=["Classification"])

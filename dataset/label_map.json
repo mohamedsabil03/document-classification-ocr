@@ -1,0 +1,18 @@
+{
+  "label2id": {
+    "invoice": 0,
+    "receipt": 1,
+    "resume": 2,
+    "letter": 3,
+    "scientific_report": 4,
+    "legal_contract": 5
+  },
+  "id2label": {
+    "0": "invoice",
+    "1": "receipt",
+    "2": "resume",
+    "3": "letter",
+    "4": "scientific_report",
+    "5": "legal_contract"
+  }
+}

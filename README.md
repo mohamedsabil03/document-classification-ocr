@@ -4,7 +4,7 @@ An end-to-end Machine Learning pipeline and production-ready REST API for classi
 
 ---
 
-## 📌 Project Overview
+## Project Overview
 
 This repository implements a complete document classification lifecycle:
 1. **Synthetic OCR Data Generation**: Realistic text templates with simulated OCR noise (character replacements, swaps, drops, spacing, and line break artifacts).
@@ -15,7 +15,7 @@ This repository implements a complete document classification lifecycle:
 
 ---
 
-## 🗂️ Project Architecture & Directory Structure
+## Project Architecture & Directory Structure
 
 ```
 problem 1/
@@ -42,19 +42,19 @@ problem 1/
 
 ---
 
-## 🏷️ Supported Document Classes
+## Supported Document Classes
 
 The system classifies document text into **6 distinct document categories**:
-* 🧾 `invoice`: Corporate billing statements, invoice numbers, line items, and totals.
-* 🧾 `receipt`: Store retail sales receipts with itemized items, subtotal, and tax.
-* 📄 `resume`: Professional CVs with work history, education, skills, and contact info.
-* ✉️ `letter`: Formal business communications and correspondence.
-* 🔬 `scientific_report`: Academic paper abstracts, methodology, results, and citations.
-* ⚖️ `legal_contract`: Non-disclosure agreements (NDAs), clauses, and legal signatures.
+* `invoice`: Corporate billing statements, invoice numbers, line items, and totals.
+* `receipt`: Store retail sales receipts with itemized items, subtotal, and tax.
+* `resume`: Professional CVs with work history, education, skills, and contact info.
+* `letter`: Formal business communications and correspondence.
+* `scientific_report`: Academic paper abstracts, methodology, results, and citations.
+* `legal_contract`: Non-disclosure agreements (NDAs), clauses, and legal signatures.
 
 ---
 
-## 🚀 Key Features & Implementation Details
+##  Key Features & Implementation Details
 
 ### 1. Synthetic Data Generator (`generate_dataset.py`)
 * Generates **6,000 document samples** across the 6 document classes.
@@ -85,7 +85,7 @@ The system classifies document text into **6 distinct document categories**:
 
 ---
 
-## 📊 Model Performance Benchmark
+## Model Performance Benchmark
 
 Evaluated on 900 test samples across 6 document classes:
 
@@ -101,7 +101,7 @@ Evaluated on 900 test samples across 6 document classes:
 
 ---
 
-## 🛠️ Getting Started & Usage
+## Getting Started & Usage
 
 ### 1. Requirements & Installation
 
@@ -198,6 +198,6 @@ curl -X POST "http://127.0.0.1:8000/predict" \
 
 ---
 
-## 📝 License
+## License
 
 This project is open-source under the MIT License.

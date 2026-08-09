@@ -65,6 +65,19 @@ def run_tests():
         assert data["model_used"] == "DistilBERT"
 
 
+        # Test 6: GET /sample (Random Dataset Sample)
+        print("\n[Test 6] GET /sample/invoice & GET /sample/random")
+        res_sample = client.get("/sample/invoice")
+        assert res_sample.status_code == 200
+        sample_data = res_sample.json()
+        assert sample_data["label"] == "invoice"
+        assert len(sample_data["text"]) > 0
+        print("Sample Invoice fetched:", sample_data["text"][:60], "...")
+
+        res_random = client.get("/sample/random")
+        assert res_random.status_code == 200
+        assert len(res_random.json()["text"]) > 0
+
         # Test 7: Error Handling - Empty Text
         print("\n[Test 7] POST /predict (Error Handling - Empty Text)")
         empty_payload = {"text": "   "}

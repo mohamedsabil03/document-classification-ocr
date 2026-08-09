@@ -31,7 +31,8 @@ problem 1/
 │   ├── best_model_info.json    # Metadata on selected best model
 │   ├── metrics_summary.json    # Detailed test metrics & confusion matrices
 │   └── model_comparison.md     # Auto-generated markdown evaluation report
-├── api.py                      # FastAPI REST server & embedded Web Dashboard
+├── api.py                      # FastAPI REST server & API endpoints
+├── index.html                  # Standalone Web Dashboard UI template
 ├── evaluate.py                 # Comprehensive model evaluation script
 ├── generate_dataset.py         # Synthetic OCR document text & noise generator
 ├── test_api.py                 # FastAPI endpoint test client script
@@ -54,7 +55,7 @@ The system classifies document text into **6 distinct document categories**:
 
 ---
 
-##  Key Features & Implementation Details
+## ⚡ Key Features & Implementation Details
 
 ### 1. Synthetic Data Generator (`generate_dataset.py`)
 * Generates **6,000 document samples** across the 6 document classes.
@@ -73,15 +74,17 @@ The system classifies document text into **6 distinct document categories**:
 * Computes Accuracy, Weighted/Macro Precision, Recall, F1-Score, Per-Class Classification Reports, and Confusion Matrices.
 * Measures CPU inference latency (ms per document) and model disk footprint (MB).
 
-### 4. Production REST API & Web Dashboard (`api.py`)
+### 4. Production REST API & Web Dashboard (`api.py` & `index.html`)
 * Built with **FastAPI** and **Uvicorn**.
-* Pre-loads all available fine-tuned models at startup with zero-downtime dynamic model selection per request.
-* **Embedded Interactive UI**: Accessible at `http://127.0.0.1:8000/` featuring modern dark-mode aesthetic, document template presets, real-time confidence scores, class probability visualizers, and model selector.
+* Pre-loads fine-tuned models at startup with zero-downtime model selection per request.
+* **Dynamic Dataset Sampling (`GET /sample/{doc_type}`)**: Clicking any document category button in the UI dynamically fetches a fresh **random sample from the dataset**.
+* **Side-by-Side Model Comparison**: Choose `Compare Both Models` mode to evaluate DistilBERT and TinyBERT simultaneously, comparing predictions, confidence, and latencies live.
+* **Standalone Web Dashboard (`index.html`)**: Clean UI served at `http://127.0.0.1:8000/`.
 * **OpenAPI Documentation**: Automatically generated interactive Swagger UI (`/docs`).
 
 ### 5. Automated Endpoint Testing (`test_api.py`)
 * Unit & integration tests utilizing `fastapi.testclient.TestClient`.
-* Validates status codes, response structure, error handling (empty text, invalid model names), and classification accuracy across models.
+* Validates status codes, response structure, sample fetching, error handling (empty text, invalid model names), and classification accuracy across models.
 
 ---
 
@@ -196,8 +199,28 @@ curl -X POST "http://127.0.0.1:8000/predict" \
 }
 ```
 
+### `GET /sample/{doc_type}`
+
+Fetch a random document OCR text sample directly from the dataset (`invoice`, `receipt`, `resume`, `letter`, `scientific`, `contract`, or `random`).
+
+**Request:**
+```bash
+curl -X GET "http://127.0.0.1:8000/sample/invoice"
+```
+
+**Response:**
+```json
+{
+  "doc_type": "invoice",
+  "label": "invoice",
+  "text": "INVOICE\nApex Solutions\nInvoice Number: INV-2026-8381...",
+  "source": "dataset"
+}
+```
+
 ---
 
 ## License
 
 This project is open-source under the MIT License.
+

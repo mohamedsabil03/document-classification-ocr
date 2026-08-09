@@ -14,7 +14,7 @@ SEED = 42
 MODEL_CONFIGS = [
     {
         "name": "DistilBERT",
-        "path": "models/distilbert_base_uncased",
+        "path": "models/distilbert_base_uncased" if os.path.exists("models/distilbert_base_uncased") else "distilbert-base-uncased",
         "output_dir": os.path.join(SAVED_MODELS_DIR, "distilbert_doc_classifier"),
         "lr": 3e-5,
         "epochs": 4,
@@ -22,7 +22,7 @@ MODEL_CONFIGS = [
     },
     {
         "name": "TinyBERT",
-        "path": "models/tinybert_general_4l_312d",
+        "path": "models/tinybert_general_4l_312d" if os.path.exists("models/tinybert_general_4l_312d") else "huawei-noah/TinyBERT_General_4L_312D",
         "output_dir": os.path.join(SAVED_MODELS_DIR, "tinybert_doc_classifier"),
         "lr": 5e-5,
         "epochs": 4,

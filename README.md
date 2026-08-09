@@ -55,7 +55,7 @@ The system classifies document text into **6 distinct document categories**:
 
 ---
 
-## ⚡ Key Features & Implementation Details
+## Key Features & Implementation Details
 
 ### 1. Synthetic Data Generator (`generate_dataset.py`)
 * Generates **6,000 document samples** across the 6 document classes.

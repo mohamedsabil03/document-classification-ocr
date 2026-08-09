@@ -125,8 +125,9 @@ def load_all_models():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    load_all_models()
-    load_dataset_samples()
+    if not LOADED_MODELS:
+        load_all_models()
+        load_dataset_samples()
     yield
 
 app = FastAPI(
@@ -136,8 +137,17 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Auto-load models on import
+if not LOADED_MODELS and os.path.exists(LABEL_MAP_PATH):
+    try:
+        load_all_models()
+        load_dataset_samples()
+    except Exception as _e:
+        print(f"Startup model load warning: {_e}")
+
 # Input schemas
 class DocumentRequest(BaseModel):
+    model_config = {"protected_namespaces": ()}
     text: str = Field(
         ..., 
         description="Raw OCR text extracted from document scan.",
@@ -151,6 +161,7 @@ class DocumentRequest(BaseModel):
 
 # Output schema
 class PredictionResponse(BaseModel):
+    model_config = {"protected_namespaces": ()}
     predicted_document_type: str
     confidence_score: float
     model_used: str

@@ -78,8 +78,8 @@ The system classifies document text into **6 distinct document categories**:
 * Built with **FastAPI** and **Uvicorn**.
 * Pre-loads fine-tuned models at startup with zero-downtime model selection per request.
 * **Dynamic Dataset Sampling (`GET /sample/{doc_type}`)**: Clicking any document category button in the UI dynamically fetches a fresh **random sample from the dataset**.
-* **Side-by-Side Model Comparison**: Choose `Compare Both Models` mode to evaluate DistilBERT and TinyBERT simultaneously, comparing predictions, confidence, and latencies live.
-* **Standalone Web Dashboard (`index.html`)**: Clean UI served at `http://127.0.0.1:8000/`.
+* **Side-by-Side Model Comparison**: Select `Compare Both Models` mode to evaluate DistilBERT and TinyBERT simultaneously, comparing predictions, confidence, and latencies live.
+* **Standalone Web Dashboard (`index.html`)**: Served at `http://127.0.0.1:8000/`.
 * **OpenAPI Documentation**: Automatically generated interactive Swagger UI (`/docs`).
 
 ### 5. Automated Endpoint Testing (`test_api.py`)

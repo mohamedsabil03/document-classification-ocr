@@ -116,25 +116,49 @@ def main():
     print(f"{'F1-Score (Weighted)':<25} | {all_metrics['DistilBERT']['f1_weighted']:<20.4f} | {all_metrics['TinyBERT']['f1_weighted']:<20.4f}")
     print("="*80)
 
-    # Determine Winner
-    distil_score = all_metrics['DistilBERT']['f1_weighted']
-    tiny_score = all_metrics['TinyBERT']['f1_weighted']
-    
-    if distil_score >= tiny_score:
-        winner = "DistilBERT"
-    else:
-        winner = "TinyBERT"
+    # Determine Result and Winner
+    distil_f1 = all_metrics['DistilBERT']['f1_weighted']
+    tiny_f1 = all_metrics['TinyBERT']['f1_weighted']
 
-    print(f"\nWinning Model Selected: {winner} (F1-Weighted: {all_metrics[winner]['f1_weighted']})")
+    print(f"\nDistilBERT F1: {distil_f1:.3f}")
+    print(f"TinyBERT F1:   {tiny_f1:.3f}")
+
+    if abs(distil_f1 - tiny_f1) < 1e-4:
+        result_str = "Tie"
+        selected_model = "TinyBERT"
+        winner_reason = "Tied on F1 score; TinyBERT selected for ~4.6x smaller size and lower latency"
+        better_acc = "Tie"
+        better_prec = "Tie"
+        better_rec = "Tie"
+        better_f1 = "Tie"
+    elif distil_f1 > tiny_f1:
+        result_str = "DistilBERT"
+        selected_model = "DistilBERT"
+        winner_reason = "DistilBERT achieved higher F1 score"
+        better_acc = "DistilBERT"
+        better_prec = "DistilBERT"
+        better_rec = "DistilBERT"
+        better_f1 = "DistilBERT"
+    else:
+        result_str = "TinyBERT"
+        selected_model = "TinyBERT"
+        winner_reason = "TinyBERT achieved higher F1 score"
+        better_acc = "TinyBERT"
+        better_prec = "TinyBERT"
+        better_rec = "TinyBERT"
+        better_f1 = "TinyBERT"
+
+    print(f"\nResult: {result_str}")
 
     # Save metrics summary
     with open(os.path.join(SAVED_MODELS_DIR, "metrics_summary.json"), "w") as f:
         json.dump(all_metrics, f, indent=2)
 
     best_info = {
-        "best_model_name": winner,
-        "best_model_dir": all_metrics[winner]["model_dir"],
-        "metrics": all_metrics[winner]
+        "best_model_name": selected_model,
+        "best_model_dir": all_metrics[selected_model]["model_dir"],
+        "result": result_str,
+        "metrics": all_metrics[selected_model]
     }
     with open(os.path.join(SAVED_MODELS_DIR, "best_model_info.json"), "w") as f:
         json.dump(best_info, f, indent=2)
@@ -151,15 +175,16 @@ Evaluated on held-out test dataset ({len(test_df)} OCR document samples across 6
 | **Parameters** | {all_metrics['DistilBERT']['parameters']:,} | {all_metrics['TinyBERT']['parameters']:,} | TinyBERT (~4.6x smaller) |
 | **Model Disk Size** | {all_metrics['DistilBERT']['model_size_mb']} MB | {all_metrics['TinyBERT']['model_size_mb']} MB | TinyBERT |
 | **Avg Latency (CPU)** | {all_metrics['DistilBERT']['avg_latency_ms']} ms/doc | {all_metrics['TinyBERT']['avg_latency_ms']} ms/doc | TinyBERT (~3-4x faster) |
-| **Accuracy** | **{all_metrics['DistilBERT']['accuracy']:.4f}** | **{all_metrics['TinyBERT']['accuracy']:.4f}** | {winner} |
-| **Precision (Weighted)** | **{all_metrics['DistilBERT']['precision_weighted']:.4f}** | **{all_metrics['TinyBERT']['precision_weighted']:.4f}** | {winner} |
-| **Recall (Weighted)** | **{all_metrics['DistilBERT']['recall_weighted']:.4f}** | **{all_metrics['TinyBERT']['recall_weighted']:.4f}** | {winner} |
-| **F1-Score (Weighted)** | **{all_metrics['DistilBERT']['f1_weighted']:.4f}** | **{all_metrics['TinyBERT']['f1_weighted']:.4f}** | {winner} |
+| **Accuracy** | **{all_metrics['DistilBERT']['accuracy']:.4f}** | **{all_metrics['TinyBERT']['accuracy']:.4f}** | {better_acc} |
+| **Precision (Weighted)** | **{all_metrics['DistilBERT']['precision_weighted']:.4f}** | **{all_metrics['TinyBERT']['precision_weighted']:.4f}** | {better_prec} |
+| **Recall (Weighted)** | **{all_metrics['DistilBERT']['recall_weighted']:.4f}** | **{all_metrics['TinyBERT']['recall_weighted']:.4f}** | {better_rec} |
+| **F1-Score (Weighted)** | **{all_metrics['DistilBERT']['f1_weighted']:.4f}** | **{all_metrics['TinyBERT']['f1_weighted']:.4f}** | {better_f1} |
 
 ## Recommendation & Deployment Choice
 
-- **Selected Model for REST API**: **{winner}**
-- **Location**: `{all_metrics[winner]['model_dir']}`
+- **Result**: **{result_str}**
+- **Selected Model for REST API**: **{selected_model}** ({winner_reason})
+- **Location**: `{all_metrics[selected_model]['model_dir']}`
 
 """
     with open(os.path.join(SAVED_MODELS_DIR, "model_comparison.md"), "w") as f:

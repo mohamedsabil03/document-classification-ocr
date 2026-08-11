@@ -1,99 +1,88 @@
-import sys
+import pytest
 from fastapi.testclient import TestClient
 from api import app
 
-def run_tests():
-    print("==================================================")
-    print("       RUNNING FASTAPI ENDPOINT UNIT TESTS")
-    print("==================================================")
+@pytest.fixture(scope="module")
+def client():
+    with TestClient(app) as c:
+        yield c
 
-    with TestClient(app) as client:
-        # Test 1: Dashboard HTML Endpoint
-        print("\n[Test 1] GET / (Dashboard UI)")
-        res = client.get("/")
-        assert res.status_code == 200, f"Expected 200, got {res.status_code}"
-        assert "text/html" in res.headers["content-type"]
-        assert "Document OCR Classifier" in res.text
+def test_dashboard_ui(client):
+    """Test GET / (Dashboard UI HTML endpoint)"""
+    res = client.get("/")
+    assert res.status_code == 200, f"Expected 200, got {res.status_code}"
+    assert "text/html" in res.headers["content-type"]
+    assert "Document OCR Classifier" in res.text
 
-        # Test 1b: Info JSON Endpoint
-        print("\n[Test 1b] GET /info (API Info)")
-        res_info = client.get("/info")
-        assert res_info.status_code == 200
-        assert res_info.json()["status"] == "online"
+def test_api_info(client):
+    """Test GET /info (API Info endpoint)"""
+    res_info = client.get("/info")
+    assert res_info.status_code == 200
+    assert res_info.json()["status"] == "online"
 
-        # Test 2: Health Endpoint
-        print("\n[Test 2] GET /health (Health Check)")
-        res = client.get("/health")
-        assert res.status_code == 200, f"Expected 200, got {res.status_code}"
-        data = res.json()
-        print("Response:", data)
-        assert data["status"] == "healthy"
+def test_health_check(client):
+    """Test GET /health (Health Check endpoint)"""
+    res = client.get("/health")
+    assert res.status_code == 200, f"Expected 200, got {res.status_code}"
+    data = res.json()
+    assert data["status"] == "healthy"
 
-        # Test 3: Prediction with Default Model
-        print("\n[Test 3] POST /predict (Default Model)")
-        sample_invoice = {
-            "text": "INVOICE #99482\nVendor: Apex Logistics\nDate: 2026-08-01\nTotal Amount Due: $4,500.00\nPlease pay by wire transfer."
-        }
-        res = client.post("/predict", json=sample_invoice)
-        assert res.status_code == 200, f"Expected 200, got {res.status_code}"
-        data = res.json()
-        print("Prediction Result:", data)
-        assert data["predicted_document_type"] == "invoice"
+def test_predict_default(client):
+    """Test POST /predict with default model"""
+    sample_invoice = {
+        "text": "INVOICE #99482\nVendor: Apex Logistics\nDate: 2026-08-01\nTotal Amount Due: $4,500.00\nPlease pay by wire transfer."
+    }
+    res = client.post("/predict", json=sample_invoice)
+    assert res.status_code == 200, f"Expected 200, got {res.status_code}"
+    data = res.json()
+    assert data["predicted_document_type"] == "invoice"
 
-        # Test 4: Prediction explicitly asking for TinyBERT
-        print("\n[Test 4] POST /predict (Explicitly Requesting TinyBERT)")
-        sample_tiny = {
-            "text": "INVOICE #99482\nVendor: Apex Logistics\nDate: 2026-08-01\nTotal Amount Due: $4,500.00",
-            "model_name": "tinybert"
-        }
-        res = client.post("/predict", json=sample_tiny)
-        assert res.status_code == 200
-        data = res.json()
-        print("Prediction Result:", data)
-        assert data["model_used"] == "TinyBERT"
+def test_predict_tinybert(client):
+    """Test POST /predict with explicit TinyBERT model"""
+    sample_tiny = {
+        "text": "INVOICE #99482\nVendor: Apex Logistics\nDate: 2026-08-01\nTotal Amount Due: $4,500.00",
+        "model_name": "tinybert"
+    }
+    res = client.post("/predict", json=sample_tiny)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["model_used"] == "TinyBERT"
 
-        # Test 5: Prediction explicitly asking for DistilBERT
-        print("\n[Test 5] POST /predict (Explicitly Requesting DistilBERT)")
-        sample_distil = {
-            "text": "INVOICE #99482\nVendor: Apex Logistics\nDate: 2026-08-01\nTotal Amount Due: $4,500.00",
-            "model_name": "distilbert"
-        }
-        res = client.post("/predict", json=sample_distil)
-        assert res.status_code == 200
-        data = res.json()
-        print("Prediction Result:", data)
-        assert data["model_used"] == "DistilBERT"
+def test_predict_distilbert(client):
+    """Test POST /predict with explicit DistilBERT model"""
+    sample_distil = {
+        "text": "INVOICE #99482\nVendor: Apex Logistics\nDate: 2026-08-01\nTotal Amount Due: $4,500.00",
+        "model_name": "distilbert"
+    }
+    res = client.post("/predict", json=sample_distil)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["model_used"] == "DistilBERT"
 
+def test_sample_endpoints(client):
+    """Test GET /sample/invoice and GET /sample/random"""
+    res_sample = client.get("/sample/invoice")
+    assert res_sample.status_code == 200
+    sample_data = res_sample.json()
+    assert sample_data["label"] == "invoice"
+    assert len(sample_data["text"]) > 0
 
-        # Test 6: GET /sample (Random Dataset Sample)
-        print("\n[Test 6] GET /sample/invoice & GET /sample/random")
-        res_sample = client.get("/sample/invoice")
-        assert res_sample.status_code == 200
-        sample_data = res_sample.json()
-        assert sample_data["label"] == "invoice"
-        assert len(sample_data["text"]) > 0
-        print("Sample Invoice fetched:", sample_data["text"][:60], "...")
+    res_random = client.get("/sample/random")
+    assert res_random.status_code == 200
+    assert len(res_random.json()["text"]) > 0
 
-        res_random = client.get("/sample/random")
-        assert res_random.status_code == 200
-        assert len(res_random.json()["text"]) > 0
+def test_predict_empty_text(client):
+    """Test POST /predict error handling with empty text"""
+    empty_payload = {"text": "   "}
+    res = client.post("/predict", json=empty_payload)
+    assert res.status_code == 400
 
-        # Test 7: Error Handling - Empty Text
-        print("\n[Test 7] POST /predict (Error Handling - Empty Text)")
-        empty_payload = {"text": "   "}
-        res = client.post("/predict", json=empty_payload)
-        assert res.status_code == 400
-
-        # Test 8: Error Handling - Invalid Model Name
-        print("\n[Test 8] POST /predict (Error Handling - Invalid Model Name)")
-        invalid_model_payload = {"text": "INVOICE #100", "model_name": "unknown_model"}
-        res = client.post("/predict", json=invalid_model_payload)
-        assert res.status_code == 400
-        print("Correctly caught invalid model response:", res.json())
-
-    print("\n==================================================")
-    print("       ALL API TESTS PASSED SUCCESSFULLY!          ")
-    print("==================================================")
+def test_predict_invalid_model(client):
+    """Test POST /predict error handling with invalid model name"""
+    invalid_model_payload = {"text": "INVOICE #100", "model_name": "unknown_model"}
+    res = client.post("/predict", json=invalid_model_payload)
+    assert res.status_code == 400
 
 if __name__ == "__main__":
-    run_tests()
+    pytest.main(["-v", __file__])
+

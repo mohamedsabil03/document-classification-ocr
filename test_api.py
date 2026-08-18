@@ -36,6 +36,28 @@ def test_predict_default(client):
     assert res.status_code == 200, f"Expected 200, got {res.status_code}"
     data = res.json()
     assert data["predicted_document_type"] == "invoice"
+    assert "input_tokens" in data and data["input_tokens"] > 0
+    assert "output_tokens" in data and data["output_tokens"] > 0
+    assert "cache_tokens" in data and data["cache_tokens"] >= 0
+    assert "total_tokens" in data and data["total_tokens"] == data["input_tokens"] + data["output_tokens"]
+
+def test_predict_token_caching(client):
+    """Test prompt token caching hit on repeated text prediction"""
+    unique_text = "UNIQUE INVOICE TEST FOR PROMPT CACHING TOKEN VERIFICATION #12345"
+    payload = {"text": unique_text, "model_name": "distilbert"}
+    
+    # First request: Cache Miss
+    res1 = client.post("/predict", json=payload)
+    assert res1.status_code == 200
+    data1 = res1.json()
+    assert data1["cache_tokens"] == 0
+
+    # Second request: Cache Hit
+    res2 = client.post("/predict", json=payload)
+    assert res2.status_code == 200
+    data2 = res2.json()
+    assert data2["cache_tokens"] == data2["input_tokens"]
+    assert data2["cache_tokens"] > 0
 
 def test_predict_tinybert(client):
     """Test POST /predict with explicit TinyBERT model"""

@@ -166,7 +166,14 @@ class PredictionResponse(BaseModel):
     confidence_score: float
     model_used: str
     inference_time_ms: float
+    input_tokens: int
+    output_tokens: int
+    cache_tokens: int
+    total_tokens: int
     class_probabilities: dict
+
+# Prompt token cache store
+PROMPT_TOKEN_CACHE = set()
 
 class SampleResponse(BaseModel):
     doc_type: str
@@ -293,6 +300,22 @@ def predict_document_type(payload: DocumentRequest):
         confidence = float(probs[pred_id])
         latency_ms = round((time.time() - start_t) * 1000.0, 2)
 
+        # Token metrics calculation
+        encoded_tokens = tokenizer_obj.encode(raw_text, truncation=True, max_length=128)
+        input_tokens = len(encoded_tokens)
+
+        output_tokens_encoded = tokenizer_obj.encode(predicted_class, add_special_tokens=False)
+        output_tokens = max(1, len(output_tokens_encoded))
+
+        cache_key = (selected_key, raw_text)
+        if cache_key in PROMPT_TOKEN_CACHE:
+            cache_tokens = input_tokens
+        else:
+            cache_tokens = 0
+            PROMPT_TOKEN_CACHE.add(cache_key)
+
+        total_tokens = input_tokens + output_tokens
+
         class_probs = {id2label[i]: float(round(probs[i], 4)) for i in range(len(id2label))}
 
         return PredictionResponse(
@@ -300,6 +323,10 @@ def predict_document_type(payload: DocumentRequest):
             confidence_score=round(confidence, 4),
             model_used=disp_name,
             inference_time_ms=latency_ms,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_tokens=cache_tokens,
+            total_tokens=total_tokens,
             class_probabilities=class_probs
         )
 

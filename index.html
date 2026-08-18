@@ -371,6 +371,59 @@
         .api-docs-link a:hover {
             text-decoration: underline;
         }
+
+        /* Token Metrics Styling */
+        .token-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .token-card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .token-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .token-val {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .cache-badge {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-weight: 700;
+        }
+
+        .cache-badge.hit {
+            background: rgba(52, 211, 153, 0.2);
+            color: var(--accent-green);
+            border: 1px solid rgba(52, 211, 153, 0.4);
+        }
+
+        .cache-badge.miss {
+            background: rgba(148, 163, 184, 0.15);
+            color: var(--text-muted);
+            border: 1px solid rgba(148, 163, 184, 0.3);
+        }
     </style>
 </head>
 
@@ -441,6 +494,25 @@
                     <div class="confidence-chip" id="predConfidence">98.5%</div>
                 </div>
 
+                <div class="token-stats-grid">
+                    <div class="token-card">
+                        <div class="token-label">Input Tokens</div>
+                        <div class="token-val" id="tokenInput">0</div>
+                    </div>
+                    <div class="token-card">
+                        <div class="token-label">Output Tokens</div>
+                        <div class="token-val" id="tokenOutput">0</div>
+                    </div>
+                    <div class="token-card">
+                        <div class="token-label">Cache Tokens <span class="cache-badge miss" id="tokenCacheBadge">Miss</span></div>
+                        <div class="token-val" id="tokenCache">0</div>
+                    </div>
+                    <div class="token-card">
+                        <div class="token-label">Total Tokens</div>
+                        <div class="token-val" id="tokenTotal">0</div>
+                    </div>
+                </div>
+
                 <div class="probs-title">Class Probabilities Distribution</div>
                 <div id="probsContainer"></div>
             </div>
@@ -457,8 +529,13 @@
                         </div>
                         <div class="confidence-chip" id="d1Conf">-</div>
                     </div>
-                    <div style="font-size:11px; color:var(--text-muted); margin-bottom:10px;">Latency: <strong
+                    <div style="font-size:11px; color:var(--text-muted); margin-bottom:6px;">Latency: <strong
                             id="d1Latency" style="color:var(--text-main);">-</strong></div>
+                    <div style="font-size:11px; color:var(--text-muted); margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap; background:rgba(0,0,0,0.2); padding:6px 8px; border-radius:6px;">
+                        <span>In: <strong id="d1InputTok" style="color:var(--text-main);">-</strong></span> |
+                        <span>Out: <strong id="d1OutputTok" style="color:var(--text-main);">-</strong></span> |
+                        <span>Cache: <strong id="d1CacheTok" style="color:var(--text-main);">-</strong></span>
+                    </div>
                     <div id="d1Probs"></div>
                 </div>
 
@@ -475,8 +552,13 @@
                         <div class="confidence-chip" style="background:var(--accent-purple); color:#fff;" id="d2Conf">-
                         </div>
                     </div>
-                    <div style="font-size:11px; color:var(--text-muted); margin-bottom:10px;">Latency: <strong
+                    <div style="font-size:11px; color:var(--text-muted); margin-bottom:6px;">Latency: <strong
                             id="d2Latency" style="color:var(--text-main);">-</strong></div>
+                    <div style="font-size:11px; color:var(--text-muted); margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap; background:rgba(0,0,0,0.2); padding:6px 8px; border-radius:6px;">
+                        <span>In: <strong id="d2InputTok" style="color:var(--text-main);">-</strong></span> |
+                        <span>Out: <strong id="d2OutputTok" style="color:var(--text-main);">-</strong></span> |
+                        <span>Cache: <strong id="d2CacheTok" style="color:var(--text-main);">-</strong></span>
+                    </div>
                     <div id="d2Probs"></div>
                 </div>
             </div>
@@ -593,6 +675,21 @@
             document.getElementById('predLatency').innerText = data.inference_time_ms + ' ms';
             document.getElementById('predConfidence').innerText = (data.confidence_score * 100).toFixed(1) + '%';
 
+            // Populate token metrics
+            document.getElementById('tokenInput').innerText = data.input_tokens || 0;
+            document.getElementById('tokenOutput').innerText = data.output_tokens || 0;
+            document.getElementById('tokenCache').innerText = data.cache_tokens || 0;
+            document.getElementById('tokenTotal').innerText = data.total_tokens || 0;
+
+            const badge = document.getElementById('tokenCacheBadge');
+            if (data.cache_tokens && data.cache_tokens > 0) {
+                badge.className = 'cache-badge hit';
+                badge.innerText = 'Hit';
+            } else {
+                badge.className = 'cache-badge miss';
+                badge.innerText = 'Miss';
+            }
+
             const container = document.getElementById('probsContainer');
             container.innerHTML = '';
 
@@ -626,12 +723,18 @@
             document.getElementById('d1Class').innerText = d1.predicted_document_type.replace('_', ' ');
             document.getElementById('d1Conf').innerText = (d1.confidence_score * 100).toFixed(1) + '%';
             document.getElementById('d1Latency').innerText = d1.inference_time_ms + ' ms';
+            document.getElementById('d1InputTok').innerText = d1.input_tokens || 0;
+            document.getElementById('d1OutputTok').innerText = d1.output_tokens || 0;
+            document.getElementById('d1CacheTok').innerText = d1.cache_tokens || 0;
             renderMiniProbs('d1Probs', d1.class_probabilities);
 
             // Model 2 (TinyBERT)
             document.getElementById('d2Class').innerText = d2.predicted_document_type.replace('_', ' ');
             document.getElementById('d2Conf').innerText = (d2.confidence_score * 100).toFixed(1) + '%';
             document.getElementById('d2Latency').innerText = d2.inference_time_ms + ' ms';
+            document.getElementById('d2InputTok').innerText = d2.input_tokens || 0;
+            document.getElementById('d2OutputTok').innerText = d2.output_tokens || 0;
+            document.getElementById('d2CacheTok').innerText = d2.cache_tokens || 0;
             renderMiniProbs('d2Probs', d2.class_probabilities);
         }
 
